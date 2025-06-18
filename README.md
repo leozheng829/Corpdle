@@ -95,7 +95,3 @@ Corpdle Website/
 
 - Inspired by [Wordle](https://www.nytimes.com/games/wordle/index.html)
 - Company data and hints are for educational and entertainment purposes only.
-
-## License
-
-[MIT](LICENSE)
