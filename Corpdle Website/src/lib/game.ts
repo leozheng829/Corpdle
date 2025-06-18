@@ -1,5 +1,5 @@
-
-import { shuffleArray } from './utils'
+import { shuffleArray } from "./utils";
+import { isCloseEnough } from "./utils";
 
 export interface Company {
   id: number;
@@ -18,84 +18,83 @@ export interface GameState {
   currentCompany: Company | null;
   guesses: string[];
   maxGuesses: number;
-  gameStatus: 'playing' | 'won' | 'lost';
+  gameStatus: "playing" | "won" | "lost";
   revealedHints: string[];
   availableHints: string[];
 }
 
 // Hint types in the order they should be revealed
 export const HINT_TYPES = [
-  'revenue',  // First hint to reveal
-  'headquarters',
-  'industry',
-  'ceo',
-  'colors',
-  'hint'        // Slogan/Motto
+  "revenue", // First hint to reveal
+  "headquarters",
+  "industry",
+  "ceo",
+  "colors",
+  "hint", // Slogan/Motto
 ];
 
 export const HINT_LABELS: Record<string, string> = {
-  industry: 'Industry',
-  founded: 'Founded',
-  headquarters: 'Headquarters',
-  ceo: 'CEO',
-  revenue: 'Annual Revenue',
-  employees: 'Employees',
-  colors: 'Brand Colors',
-  hint: 'Slogan/Motto'
+  industry: "Industry",
+  founded: "Founded",
+  headquarters: "Headquarters",
+  ceo: "CEO",
+  revenue: "Annual Revenue",
+  employees: "Employees",
+  colors: "Brand Colors",
+  hint: "Slogan/Motto",
 };
 
 export function initializeGame(): GameState {
   const companies = shuffleArray(COMPANIES);
   const currentCompany = companies[0];
-  
+
   // Start with revenue hint revealed, other hints available
   return {
     currentCompany,
     guesses: [],
     maxGuesses: 6,
-    gameStatus: 'playing',
-    revealedHints: ['revenue'], // Start with revenue hint
-    availableHints: HINT_TYPES.slice(1) // All other hints are available in the specified order
+    gameStatus: "playing",
+    revealedHints: ["revenue"], // Start with revenue hint
+    availableHints: HINT_TYPES.slice(1), // All other hints are available in the specified order
   };
 }
 
 export function makeGuess(state: GameState, guess: string): GameState {
-  if (state.gameStatus !== 'playing') {
+  if (state.gameStatus !== "playing") {
     return state;
   }
 
-  const normalizedGuess = guess.trim().toLowerCase();
-  const normalizedCompanyName = state.currentCompany?.name.toLowerCase() || '';
-  
   const newGuesses = [...state.guesses, guess];
-  
+
   let newGameStatus = state.gameStatus;
   let newRevealedHints = [...state.revealedHints];
   let newAvailableHints = [...state.availableHints];
-  
-  if (normalizedGuess === normalizedCompanyName) {
-    newGameStatus = 'won';
+
+  // Use fuzzy/normalized checking
+  if (
+    state.currentCompany &&
+    isCloseEnough(guess, state.currentCompany.name, 1)
+  ) {
+    newGameStatus = "won";
   } else {
     // Reveal a hint after a wrong guess if hints are available
     if (newAvailableHints.length > 0) {
       // Take the first hint from the available hints (to maintain order)
       const hintToReveal = newAvailableHints[0];
-      
       newRevealedHints.push(hintToReveal);
       newAvailableHints.shift(); // Remove the first hint
     }
-    
     if (newGuesses.length >= state.maxGuesses) {
-      newGameStatus = 'lost';
+      newGameStatus = "lost";
     }
   }
-  
+
   return {
     ...state,
     guesses: newGuesses,
     gameStatus: newGameStatus,
     revealedHints: newRevealedHints,
-    availableHints: newAvailableHints
+    availableHints: newAvailableHints,
   };
 }
 
@@ -106,69 +105,72 @@ export function getGameStats(): {
   maxStreak: number;
   guessDistribution: Record<number, number>;
 } {
-  const statsStr = localStorage.getItem('corpdle-stats');
+  const statsStr = localStorage.getItem("corpdle-stats");
   if (!statsStr) {
     return {
       played: 0,
       won: 0,
       currentStreak: 0,
       maxStreak: 0,
-      guessDistribution: {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}
+      guessDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 },
     };
   }
-  
+
   return JSON.parse(statsStr);
 }
 
 export function updateGameStats(state: GameState): void {
   const stats = getGameStats();
-  
+
   stats.played += 1;
-  
-  if (state.gameStatus === 'won') {
+
+  if (state.gameStatus === "won") {
     stats.won += 1;
     stats.currentStreak += 1;
     stats.maxStreak = Math.max(stats.maxStreak, stats.currentStreak);
-    
+
     // Update guess distribution
     const guessCount = state.guesses.length;
-    stats.guessDistribution[guessCount] = (stats.guessDistribution[guessCount] || 0) + 1;
+    stats.guessDistribution[guessCount] =
+      (stats.guessDistribution[guessCount] || 0) + 1;
   } else {
     stats.currentStreak = 0;
   }
-  
-  localStorage.setItem('corpdle-stats', JSON.stringify(stats));
+
+  localStorage.setItem("corpdle-stats", JSON.stringify(stats));
 }
 
 export function getLastPlayedDate(): Date | null {
-  const dateStr = localStorage.getItem('corpdle-last-played');
+  const dateStr = localStorage.getItem("corpdle-last-played");
   return dateStr ? new Date(dateStr) : null;
 }
 
 export function setLastPlayedDate(): void {
-  localStorage.setItem('corpdle-last-played', new Date().toISOString());
+  localStorage.setItem("corpdle-last-played", new Date().toISOString());
 }
 
 export function getSavedGameState(): GameState | null {
-  const gameStateStr = localStorage.getItem('corpdle-game-state');
+  const gameStateStr = localStorage.getItem("corpdle-game-state");
   return gameStateStr ? JSON.parse(gameStateStr) : null;
 }
 
 export function saveGameState(state: GameState): void {
-  localStorage.setItem('corpdle-game-state', JSON.stringify(state));
+  localStorage.setItem("corpdle-game-state", JSON.stringify(state));
 }
 
 export function shouldStartNewGame(): boolean {
   const lastPlayed = getLastPlayedDate();
   if (!lastPlayed) return true;
-  
+
   const now = new Date();
   const lastPlayedDate = new Date(lastPlayed);
-  
+
   // Check if it's a new day (UTC)
-  return lastPlayedDate.getUTCDate() !== now.getUTCDate() || 
-         lastPlayedDate.getUTCMonth() !== now.getUTCMonth() || 
-         lastPlayedDate.getUTCFullYear() !== now.getUTCFullYear();
+  return (
+    lastPlayedDate.getUTCDate() !== now.getUTCDate() ||
+    lastPlayedDate.getUTCMonth() !== now.getUTCMonth() ||
+    lastPlayedDate.getUTCFullYear() !== now.getUTCFullYear()
+  );
 }
 
 export const COMPANIES: Company[] = [
@@ -182,7 +184,7 @@ export const COMPANIES: Company[] = [
     revenue: "$282.8 billion",
     employees: "156,500",
     colors: "Blue, Red, Yellow, Green",
-    hint: "Don't Be Evil"
+    hint: "Don't Be Evil",
   },
   {
     id: 2,
@@ -194,7 +196,7 @@ export const COMPANIES: Company[] = [
     revenue: "$394.3 billion",
     employees: "164,000",
     colors: "White, Silver, Black",
-    hint: "Think Different"
+    hint: "Think Different",
   },
   {
     id: 3,
@@ -206,7 +208,7 @@ export const COMPANIES: Company[] = [
     revenue: "$211.9 billion",
     employees: "221,000",
     colors: "Blue, Green, Red, Yellow",
-    hint: "Be What's Next"
+    hint: "Be What's Next",
   },
   {
     id: 4,
@@ -218,7 +220,7 @@ export const COMPANIES: Company[] = [
     revenue: "$513.9 billion",
     employees: "1,540,000",
     colors: "Black, Orange",
-    hint: "Work Hard. Have Fun. Make History."
+    hint: "Work Hard. Have Fun. Make History.",
   },
   {
     id: 5,
@@ -230,7 +232,7 @@ export const COMPANIES: Company[] = [
     revenue: "$116.6 billion",
     employees: "77,800",
     colors: "Blue, White",
-    hint: "Move Fast and Break Things"
+    hint: "Move Fast and Break Things",
   },
   {
     id: 6,
@@ -242,7 +244,7 @@ export const COMPANIES: Company[] = [
     revenue: "$60.5 billion",
     employees: "288,300",
     colors: "Blue",
-    hint: "Think"
+    hint: "Think",
   },
   {
     id: 7,
@@ -254,7 +256,7 @@ export const COMPANIES: Company[] = [
     revenue: "$54.2 billion",
     employees: "131,900",
     colors: "Blue",
-    hint: "Intel Inside"
+    hint: "Intel Inside",
   },
   {
     id: 8,
@@ -266,7 +268,7 @@ export const COMPANIES: Company[] = [
     revenue: "$49.9 billion",
     employees: "143,000",
     colors: "Red",
-    hint: "Engineered to Work Together"
+    hint: "Engineered to Work Together",
   },
   {
     id: 9,
@@ -278,7 +280,7 @@ export const COMPANIES: Company[] = [
     revenue: "$19.4 billion",
     employees: "29,000",
     colors: "Red",
-    hint: "Creativity for All"
+    hint: "Creativity for All",
   },
   {
     id: 10,
@@ -290,7 +292,7 @@ export const COMPANIES: Company[] = [
     revenue: "$31.4 billion",
     employees: "73,000",
     colors: "Blue, White",
-    hint: "No Software"
+    hint: "No Software",
   },
   {
     id: 11,
@@ -302,7 +304,7 @@ export const COMPANIES: Company[] = [
     revenue: "$26.9 billion",
     employees: "22,500",
     colors: "Green, Black",
-    hint: "The Way It's Meant to be Played"
+    hint: "The Way It's Meant to be Played",
   },
   {
     id: 12,
@@ -314,7 +316,7 @@ export const COMPANIES: Company[] = [
     revenue: "$51.6 billion",
     employees: "83,300",
     colors: "Blue",
-    hint: "Tomorrow Starts Here"
+    hint: "Tomorrow Starts Here",
   },
   {
     id: 13,
@@ -326,7 +328,7 @@ export const COMPANIES: Company[] = [
     revenue: "$102.3 billion",
     employees: "133,000",
     colors: "Blue",
-    hint: "Yours is Here"
+    hint: "Yours is Here",
   },
   {
     id: 14,
@@ -338,7 +340,7 @@ export const COMPANIES: Company[] = [
     revenue: "$63.5 billion",
     employees: "58,000",
     colors: "Blue",
-    hint: "Keep Reinventing"
+    hint: "Keep Reinventing",
   },
   {
     id: 15,
@@ -350,7 +352,7 @@ export const COMPANIES: Company[] = [
     revenue: "$32.5 billion",
     employees: "107,400",
     colors: "Blue",
-    hint: "Run Simple"
+    hint: "Run Simple",
   },
   {
     id: 16,
@@ -362,7 +364,7 @@ export const COMPANIES: Company[] = [
     revenue: "$4.4 billion",
     employees: "7,400",
     colors: "Blue, White",
-    hint: "Meet Happy"
+    hint: "Meet Happy",
   },
   {
     id: 17,
@@ -374,7 +376,7 @@ export const COMPANIES: Company[] = [
     revenue: "$2.4 billion",
     employees: "3,000",
     colors: "Blue",
-    hint: "All Your Files, Always With You"
+    hint: "All Your Files, Always With You",
   },
   {
     id: 18,
@@ -386,7 +388,7 @@ export const COMPANIES: Company[] = [
     revenue: "$804 million",
     employees: "2,000",
     colors: "Orange, White",
-    hint: "Dive Into Anything"
+    hint: "Dive Into Anything",
   },
   {
     id: 19,
@@ -398,7 +400,7 @@ export const COMPANIES: Company[] = [
     revenue: "$13.2 billion",
     employees: "8,359",
     colors: "Green, Black",
-    hint: "Music for Everyone"
+    hint: "Music for Everyone",
   },
   {
     id: 20,
@@ -410,7 +412,7 @@ export const COMPANIES: Company[] = [
     revenue: "$9.4 billion",
     employees: "7,000",
     colors: "Black, Teal, Pink",
-    hint: "Make Your Day"
+    hint: "Make Your Day",
   },
   {
     id: 21,
@@ -422,7 +424,7 @@ export const COMPANIES: Company[] = [
     revenue: "$29.2 billion",
     employees: "5,000",
     colors: "Red, White",
-    hint: "Broadcast Yourself"
+    hint: "Broadcast Yourself",
   },
   {
     id: 22,
@@ -434,7 +436,7 @@ export const COMPANIES: Company[] = [
     revenue: "$8.7 billion",
     employees: "2,000",
     colors: "Green, White",
-    hint: "Simple. Secure. Reliable messaging."
+    hint: "Simple. Secure. Reliable messaging.",
   },
   {
     id: 23,
@@ -446,7 +448,7 @@ export const COMPANIES: Company[] = [
     revenue: "$5.1 billion",
     employees: "1,500",
     colors: "Black, White",
-    hint: "What's happening?"
+    hint: "What's happening?",
   },
   {
     id: 24,
@@ -458,7 +460,7 @@ export const COMPANIES: Company[] = [
     revenue: "$1.5 billion",
     employees: "3,000",
     colors: "Purple, White",
-    hint: "Where Work Happens"
+    hint: "Where Work Happens",
   },
   {
     id: 25,
@@ -470,7 +472,7 @@ export const COMPANIES: Company[] = [
     revenue: "$1 billion",
     employees: "3,000",
     colors: "Black, White",
-    hint: "Where the world builds software"
+    hint: "Where the world builds software",
   },
   {
     id: 26,
@@ -482,7 +484,7 @@ export const COMPANIES: Company[] = [
     revenue: "$500 million",
     employees: "400",
     colors: "Black, White",
-    hint: "All-in-one workspace"
+    hint: "All-in-one workspace",
   },
   {
     id: 27,
@@ -494,7 +496,7 @@ export const COMPANIES: Company[] = [
     revenue: "$547 million",
     employees: "1,800",
     colors: "Red, Orange",
-    hint: "Do great things together"
+    hint: "Do great things together",
   },
   {
     id: 28,
@@ -506,7 +508,7 @@ export const COMPANIES: Company[] = [
     revenue: "$3.5 billion",
     employees: "10,000",
     colors: "Blue",
-    hint: "Unleash the potential of every team"
+    hint: "Unleash the potential of every team",
   },
   {
     id: 29,
@@ -518,7 +520,7 @@ export const COMPANIES: Company[] = [
     revenue: "$100 million",
     employees: "200",
     colors: "Blue, White",
-    hint: "Organize anything, together"
+    hint: "Organize anything, together",
   },
   {
     id: 30,
@@ -530,7 +532,7 @@ export const COMPANIES: Company[] = [
     revenue: "$5.6 billion",
     employees: "11,600",
     colors: "Green, White",
-    hint: "Making commerce better for everyone"
+    hint: "Making commerce better for everyone",
   },
   {
     id: 31,
@@ -542,7 +544,7 @@ export const COMPANIES: Company[] = [
     revenue: "$244.2 billion",
     employees: "267,937",
     colors: "Blue, White",
-    hint: "Do What You Can't"
+    hint: "Do What You Can't",
   },
   {
     id: 32,
@@ -554,7 +556,7 @@ export const COMPANIES: Company[] = [
     revenue: "$88.3 billion",
     employees: "109,700",
     colors: "Black, Silver",
-    hint: "Be Moved"
+    hint: "Be Moved",
   },
   {
     id: 33,
@@ -566,7 +568,7 @@ export const COMPANIES: Company[] = [
     revenue: "$63.3 billion",
     employees: "75,000",
     colors: "Red",
-    hint: "Life's Good"
+    hint: "Life's Good",
   },
   {
     id: 34,
@@ -578,7 +580,7 @@ export const COMPANIES: Company[] = [
     revenue: "$92.4 billion",
     employees: "195,000",
     colors: "Red",
-    hint: "Building a Fully Connected, Intelligent World"
+    hint: "Building a Fully Connected, Intelligent World",
   },
   {
     id: 35,
@@ -590,7 +592,7 @@ export const COMPANIES: Company[] = [
     revenue: "$37.7 billion",
     employees: "35,000",
     colors: "Orange",
-    hint: "Just for fans"
+    hint: "Just for fans",
   },
   {
     id: 36,
@@ -602,7 +604,7 @@ export const COMPANIES: Company[] = [
     revenue: "$1.4 billion",
     employees: "1,700",
     colors: "Blue, Teal",
-    hint: "Find Your Fit"
+    hint: "Find Your Fit",
   },
   {
     id: 37,
@@ -614,7 +616,7 @@ export const COMPANIES: Company[] = [
     revenue: "$1.1 billion",
     employees: "700",
     colors: "Black, Blue",
-    hint: "Be a Hero"
+    hint: "Be a Hero",
   },
   {
     id: 38,
@@ -626,7 +628,7 @@ export const COMPANIES: Company[] = [
     revenue: "$5.5 billion",
     employees: "19,000",
     colors: "Blue, White",
-    hint: "Beat Yesterday"
+    hint: "Beat Yesterday",
   },
   {
     id: 39,
@@ -638,7 +640,7 @@ export const COMPANIES: Company[] = [
     revenue: "$4 billion",
     employees: "8,000",
     colors: "Black, White",
-    hint: "Better Sound Through Research"
+    hint: "Better Sound Through Research",
   },
   {
     id: 40,
@@ -650,7 +652,7 @@ export const COMPANIES: Company[] = [
     revenue: "$2 billion",
     employees: "700",
     colors: "Red, Black, White",
-    hint: "Hear What You Want"
+    hint: "Hear What You Want",
   },
   {
     id: 41,
@@ -662,7 +664,7 @@ export const COMPANIES: Company[] = [
     revenue: "$4.2 billion",
     employees: "14,000",
     colors: "Gray, Red",
-    hint: "The Future of Possible"
+    hint: "The Future of Possible",
   },
   {
     id: 42,
@@ -674,7 +676,7 @@ export const COMPANIES: Company[] = [
     revenue: "$3.1 billion",
     employees: "3,000",
     colors: "Purple, Black",
-    hint: "Streaming for everyone"
+    hint: "Streaming for everyone",
   },
   {
     id: 43,
@@ -686,7 +688,7 @@ export const COMPANIES: Company[] = [
     revenue: "$1.2 billion",
     employees: "2,000",
     colors: "Blue, White",
-    hint: "Smart Security for Every Home"
+    hint: "Smart Security for Every Home",
   },
   {
     id: 44,
@@ -698,7 +700,7 @@ export const COMPANIES: Company[] = [
     revenue: "$800 million",
     employees: "1,100",
     colors: "Silver, Black",
-    hint: "We make products that are beautiful, thoughtful and easy to use"
+    hint: "We make products that are beautiful, thoughtful and easy to use",
   },
   {
     id: 45,
@@ -710,7 +712,7 @@ export const COMPANIES: Company[] = [
     revenue: "$18.1 billion",
     employees: "77,000",
     colors: "Blue, White",
-    hint: "Innovation and You"
+    hint: "Innovation and You",
   },
   {
     id: 46,
@@ -722,7 +724,7 @@ export const COMPANIES: Company[] = [
     revenue: "$611.3 billion",
     employees: "2,100,000",
     colors: "Blue, Yellow",
-    hint: "Save Money. Live Better."
+    hint: "Save Money. Live Better.",
   },
   {
     id: 47,
@@ -734,7 +736,7 @@ export const COMPANIES: Company[] = [
     revenue: "$109.1 billion",
     employees: "440,000",
     colors: "Red, White",
-    hint: "Expect More. Pay Less."
+    hint: "Expect More. Pay Less.",
   },
   {
     id: 48,
@@ -746,7 +748,7 @@ export const COMPANIES: Company[] = [
     revenue: "$226.9 billion",
     employees: "304,000",
     colors: "Red, Blue",
-    hint: "Do the right thing"
+    hint: "Do the right thing",
   },
   {
     id: 49,
@@ -758,7 +760,7 @@ export const COMPANIES: Company[] = [
     revenue: "$148.3 billion",
     employees: "430,000",
     colors: "Blue, White",
-    hint: "Fresh for Everyone"
+    hint: "Fresh for Everyone",
   },
   {
     id: 50,
@@ -770,7 +772,7 @@ export const COMPANIES: Company[] = [
     revenue: "$121.1 billion",
     employees: "270,000",
     colors: "Blue, Orange",
-    hint: "Shop differentli"
+    hint: "Shop differentli",
   },
   {
     id: 51,
@@ -782,7 +784,7 @@ export const COMPANIES: Company[] = [
     revenue: "$46.3 billion",
     employees: "100,000",
     colors: "Blue, Yellow",
-    hint: "Expert Service. Unbeatable Price."
+    hint: "Expert Service. Unbeatable Price.",
   },
   {
     id: 52,
@@ -794,7 +796,7 @@ export const COMPANIES: Company[] = [
     revenue: "$9.8 billion",
     employees: "11,600",
     colors: "Red, Blue, Yellow, Green",
-    hint: "Connect. Buy. Sell."
+    hint: "Connect. Buy. Sell.",
   },
   {
     id: 53,
@@ -806,7 +808,7 @@ export const COMPANIES: Company[] = [
     revenue: "$2.6 billion",
     employees: "2,400",
     colors: "Orange",
-    hint: "Keep Commerce Human"
+    hint: "Keep Commerce Human",
   },
   {
     id: 54,
@@ -818,7 +820,7 @@ export const COMPANIES: Company[] = [
     revenue: "$12.2 billion",
     employees: "16,700",
     colors: "Purple",
-    hint: "A Zillion Things Home"
+    hint: "A Zillion Things Home",
   },
   {
     id: 55,
@@ -830,7 +832,7 @@ export const COMPANIES: Company[] = [
     revenue: "$24.4 billion",
     employees: "94,500",
     colors: "Red",
-    hint: "The Magic of Macy's"
+    hint: "The Magic of Macy's",
   },
   {
     id: 56,
@@ -842,7 +844,7 @@ export const COMPANIES: Company[] = [
     revenue: "$15.1 billion",
     employees: "72,000",
     colors: "Black, White",
-    hint: "Fashion & Style For Every You"
+    hint: "Fashion & Style For Every You",
   },
   {
     id: 57,
@@ -854,7 +856,7 @@ export const COMPANIES: Company[] = [
     revenue: "$24 billion",
     employees: "10,000",
     colors: "Black, White",
-    hint: "For the Seasons, For the Moments"
+    hint: "For the Seasons, For the Moments",
   },
   {
     id: 58,
@@ -866,7 +868,7 @@ export const COMPANIES: Company[] = [
     revenue: "$16.9 billion",
     employees: "4,000",
     colors: "Orange, White",
-    hint: "Shop Like a Billionaire"
+    hint: "Shop Like a Billionaire",
   },
   {
     id: 59,
@@ -878,7 +880,7 @@ export const COMPANIES: Company[] = [
     revenue: "$44.6 billion",
     employees: "225,000",
     colors: "Blue, Yellow",
-    hint: "Creating a Better Everyday Life"
+    hint: "Creating a Better Everyday Life",
   },
   {
     id: 60,
@@ -890,7 +892,7 @@ export const COMPANIES: Company[] = [
     revenue: "$32.6 billion",
     employees: "162,000",
     colors: "Black, White",
-    hint: "Love Your Curves"
+    hint: "Love Your Curves",
   },
   {
     id: 61,
@@ -902,7 +904,7 @@ export const COMPANIES: Company[] = [
     revenue: "$22.5 billion",
     employees: "155,000",
     colors: "Red, White",
-    hint: "Fashion and Quality at the Best Price"
+    hint: "Fashion and Quality at the Best Price",
   },
   {
     id: 62,
@@ -914,7 +916,7 @@ export const COMPANIES: Company[] = [
     revenue: "$23.6 billion",
     employees: "55,000",
     colors: "Red, White",
-    hint: "Made for All"
+    hint: "Made for All",
   },
   {
     id: 63,
@@ -926,7 +928,7 @@ export const COMPANIES: Company[] = [
     revenue: "$8.4 billion",
     employees: "50,000",
     colors: "Black, White",
-    hint: "We Are Sneakers"
+    hint: "We Are Sneakers",
   },
   {
     id: 64,
@@ -938,7 +940,7 @@ export const COMPANIES: Company[] = [
     revenue: "$5.9 billion",
     employees: "11,000",
     colors: "Red, Black",
-    hint: "Power to the Players"
+    hint: "Power to the Players",
   },
   {
     id: 65,
@@ -950,7 +952,7 @@ export const COMPANIES: Company[] = [
     revenue: "$157.4 billion",
     employees: "471,600",
     colors: "Orange, White",
-    hint: "How Doers Get More Done"
+    hint: "How Doers Get More Done",
   },
   {
     id: 66,
@@ -962,7 +964,7 @@ export const COMPANIES: Company[] = [
     revenue: "$23.2 billion",
     employees: "200,000",
     colors: "Red, Yellow",
-    hint: "I'm Lovin' It"
+    hint: "I'm Lovin' It",
   },
   {
     id: 67,
@@ -974,7 +976,7 @@ export const COMPANIES: Company[] = [
     revenue: "$32.3 billion",
     employees: "383,000",
     colors: "Green, White",
-    hint: "To inspire and nurture the human spirit"
+    hint: "To inspire and nurture the human spirit",
   },
   {
     id: 68,
@@ -986,7 +988,7 @@ export const COMPANIES: Company[] = [
     revenue: "$27.9 billion",
     employees: "400,000",
     colors: "Red, White",
-    hint: "It's Finger Lickin' Good"
+    hint: "It's Finger Lickin' Good",
   },
   {
     id: 69,
@@ -998,7 +1000,7 @@ export const COMPANIES: Company[] = [
     revenue: "$14 billion",
     employees: "40,000",
     colors: "Purple, Pink",
-    hint: "Live Más"
+    hint: "Live Más",
   },
   {
     id: 70,
@@ -1010,7 +1012,7 @@ export const COMPANIES: Company[] = [
     revenue: "$16.7 billion",
     employees: "170,000",
     colors: "Red, White",
-    hint: "Eat Mor Chikin"
+    hint: "Eat Mor Chikin",
   },
   {
     id: 71,
@@ -1022,7 +1024,7 @@ export const COMPANIES: Company[] = [
     revenue: "$2.1 billion",
     employees: "14,000",
     colors: "Red, White",
-    hint: "Quality is our Recipe"
+    hint: "Quality is our Recipe",
   },
   {
     id: 72,
@@ -1034,7 +1036,7 @@ export const COMPANIES: Company[] = [
     revenue: "$9.4 billion",
     employees: "21,000",
     colors: "Yellow, Green",
-    hint: "Eat Fresh"
+    hint: "Eat Fresh",
   },
   {
     id: 73,
@@ -1046,7 +1048,7 @@ export const COMPANIES: Company[] = [
     revenue: "$4.5 billion",
     employees: "13,500",
     colors: "Red, Blue",
-    hint: "Oh Yes We Did"
+    hint: "Oh Yes We Did",
   },
   {
     id: 74,
@@ -1058,7 +1060,7 @@ export const COMPANIES: Company[] = [
     revenue: "$13.5 billion",
     employees: "100,000",
     colors: "Red, White",
-    hint: "No One OutPizzas the Hut"
+    hint: "No One OutPizzas the Hut",
   },
   {
     id: 75,
@@ -1070,7 +1072,7 @@ export const COMPANIES: Company[] = [
     revenue: "$1.4 billion",
     employees: "15,000",
     colors: "Orange, Pink",
-    hint: "America Runs on Dunkin'"
+    hint: "America Runs on Dunkin'",
   },
   {
     id: 76,
@@ -1082,7 +1084,7 @@ export const COMPANIES: Company[] = [
     revenue: "$8.6 billion",
     employees: "102,000",
     colors: "Red, White",
-    hint: "Food With Integrity"
+    hint: "Food With Integrity",
   },
   {
     id: 77,
@@ -1094,7 +1096,7 @@ export const COMPANIES: Company[] = [
     revenue: "$3 billion",
     employees: "44,000",
     colors: "Green, Brown",
-    hint: "Food as it should be"
+    hint: "Food as it should be",
   },
   {
     id: 78,
@@ -1106,7 +1108,7 @@ export const COMPANIES: Company[] = [
     revenue: "$4.4 billion",
     employees: "30,000",
     colors: "Orange, Red",
-    hint: "Louisiana Fast"
+    hint: "Louisiana Fast",
   },
   {
     id: 79,
@@ -1118,7 +1120,7 @@ export const COMPANIES: Company[] = [
     revenue: "$1.5 billion",
     employees: "21,000",
     colors: "Red, Green",
-    hint: "Original Glazed"
+    hint: "Original Glazed",
   },
   {
     id: 80,
@@ -1130,7 +1132,7 @@ export const COMPANIES: Company[] = [
     revenue: "$1.9 billion",
     employees: "32,000",
     colors: "Red, Yellow, Blue",
-    hint: "Have It Your Way"
+    hint: "Have It Your Way",
   },
   {
     id: 81,
@@ -1142,7 +1144,7 @@ export const COMPANIES: Company[] = [
     revenue: "$9.8 billion",
     employees: "15,000",
     colors: "Red, Blue, Silver",
-    hint: "Gives You Wings"
+    hint: "Gives You Wings",
   },
   {
     id: 82,
@@ -1154,7 +1156,7 @@ export const COMPANIES: Company[] = [
     revenue: "$43 billion",
     employees: "79,000",
     colors: "Red, White",
-    hint: "Taste the Feeling"
+    hint: "Taste the Feeling",
   },
   {
     id: 83,
@@ -1166,7 +1168,7 @@ export const COMPANIES: Company[] = [
     revenue: "$86.4 billion",
     employees: "315,000",
     colors: "Blue, Red, White",
-    hint: "That's What I Like"
+    hint: "That's What I Like",
   },
   {
     id: 84,
@@ -1178,7 +1180,7 @@ export const COMPANIES: Company[] = [
     revenue: "$93.2 billion",
     employees: "275,000",
     colors: "Blue, White",
-    hint: "Good Food, Good Life"
+    hint: "Good Food, Good Life",
   },
   {
     id: 85,
@@ -1190,7 +1192,7 @@ export const COMPANIES: Company[] = [
     revenue: "$5.5 billion",
     employees: "500",
     colors: "Orange, Green, Blue",
-    hint: "Is it in you?"
+    hint: "Is it in you?",
   },
   {
     id: 86,
@@ -1202,7 +1204,7 @@ export const COMPANIES: Company[] = [
     revenue: "$6.3 billion",
     employees: "4,000",
     colors: "Green, Black",
-    hint: "Unleash The Beast"
+    hint: "Unleash The Beast",
   },
   {
     id: 87,
@@ -1214,7 +1216,7 @@ export const COMPANIES: Company[] = [
     revenue: "$1.2 billion",
     employees: "2,500",
     colors: "Blue, Green, White",
-    hint: "Peace, Love, & Ice Cream"
+    hint: "Peace, Love, & Ice Cream",
   },
   {
     id: 88,
@@ -1226,7 +1228,7 @@ export const COMPANIES: Company[] = [
     revenue: "$10.4 billion",
     employees: "19,000",
     colors: "Brown, Silver",
-    hint: "The Great American Chocolate Bar"
+    hint: "The Great American Chocolate Bar",
   },
   {
     id: 89,
@@ -1238,7 +1240,7 @@ export const COMPANIES: Company[] = [
     revenue: "$26 billion",
     employees: "38,000",
     colors: "Red, White",
-    hint: "57 Varieties"
+    hint: "57 Varieties",
   },
   {
     id: 90,
@@ -1250,7 +1252,7 @@ export const COMPANIES: Company[] = [
     revenue: "$15.3 billion",
     employees: "31,000",
     colors: "Red, White",
-    hint: "The Best To You Each Morning"
+    hint: "The Best To You Each Morning",
   },
   {
     id: 91,
@@ -1262,7 +1264,7 @@ export const COMPANIES: Company[] = [
     revenue: "$176.2 billion",
     employees: "173,000",
     colors: "Blue",
-    hint: "Built Ford Tough"
+    hint: "Built Ford Tough",
   },
   {
     id: 92,
@@ -1274,7 +1276,7 @@ export const COMPANIES: Company[] = [
     revenue: "$279.6 billion",
     employees: "370,870",
     colors: "Red, Silver",
-    hint: "Let's Go Places"
+    hint: "Let's Go Places",
   },
   {
     id: 93,
@@ -1286,7 +1288,7 @@ export const COMPANIES: Company[] = [
     revenue: "$138.6 billion",
     employees: "204,035",
     colors: "Red, White",
-    hint: "The Power of Dreams"
+    hint: "The Power of Dreams",
   },
   {
     id: 94,
@@ -1298,7 +1300,7 @@ export const COMPANIES: Company[] = [
     revenue: "$171.8 billion",
     employees: "167,000",
     colors: "Gold",
-    hint: "Find New Roads"
+    hint: "Find New Roads",
   },
   {
     id: 95,
@@ -1310,7 +1312,7 @@ export const COMPANIES: Company[] = [
     revenue: "$81.5 billion",
     employees: "127,855",
     colors: "Red, Black, Silver",
-    hint: "Accelerating the World's Transition to Sustainable Energy"
+    hint: "Accelerating the World's Transition to Sustainable Energy",
   },
   {
     id: 96,
@@ -1322,7 +1324,7 @@ export const COMPANIES: Company[] = [
     revenue: "$155.1 billion",
     employees: "118,909",
     colors: "Blue, White, Black",
-    hint: "The Ultimate Driving Machine"
+    hint: "The Ultimate Driving Machine",
   },
   {
     id: 97,
@@ -1334,7 +1336,7 @@ export const COMPANIES: Company[] = [
     revenue: "$153.2 billion",
     employees: "172,425",
     colors: "Silver",
-    hint: "The Best or Nothing"
+    hint: "The Best or Nothing",
   },
   {
     id: 98,
@@ -1346,7 +1348,7 @@ export const COMPANIES: Company[] = [
     revenue: "$68.2 billion",
     employees: "87,000",
     colors: "Silver",
-    hint: "Vorsprung durch Technik"
+    hint: "Vorsprung durch Technik",
   },
   {
     id: 99,
@@ -1358,7 +1360,7 @@ export const COMPANIES: Company[] = [
     revenue: "$322.1 billion",
     employees: "675,805",
     colors: "Blue, White",
-    hint: "Das Auto"
+    hint: "Das Auto",
   },
   {
     id: 100,
@@ -1370,7 +1372,7 @@ export const COMPANIES: Company[] = [
     revenue: "$74.2 billion",
     employees: "134,111",
     colors: "Red, Silver",
-    hint: "Innovation that excites"
+    hint: "Innovation that excites",
   },
   {
     id: 101,
@@ -1382,7 +1384,7 @@ export const COMPANIES: Company[] = [
     revenue: "$114.1 billion",
     employees: "121,000",
     colors: "Blue",
-    hint: "New Thinking. New Possibilities."
+    hint: "New Thinking. New Possibilities.",
   },
   {
     id: 102,
@@ -1394,7 +1396,7 @@ export const COMPANIES: Company[] = [
     revenue: "$66.5 billion",
     employees: "52,348",
     colors: "Red",
-    hint: "Movement that inspires"
+    hint: "Movement that inspires",
   },
   {
     id: 103,
@@ -1406,7 +1408,7 @@ export const COMPANIES: Company[] = [
     revenue: "$28.5 billion",
     employees: "36,070",
     colors: "Blue",
-    hint: "Confidence in Motion"
+    hint: "Confidence in Motion",
   },
   {
     id: 104,
@@ -1418,7 +1420,7 @@ export const COMPANIES: Company[] = [
     revenue: "$32.4 billion",
     employees: "24,000",
     colors: "Green, Black",
-    hint: "Go Anywhere, Do Anything"
+    hint: "Go Anywhere, Do Anything",
   },
   {
     id: 105,
@@ -1430,7 +1432,7 @@ export const COMPANIES: Company[] = [
     revenue: "$4.4 billion",
     employees: "14,122",
     colors: "Blue, Green",
-    hint: "Keep The World Adventurous Forever"
+    hint: "Keep The World Adventurous Forever",
   },
   {
     id: 106,
@@ -1442,7 +1444,7 @@ export const COMPANIES: Company[] = [
     revenue: "$100.3 billion",
     employees: "83,000",
     colors: "Blue, White",
-    hint: "Science Will Win"
+    hint: "Science Will Win",
   },
   {
     id: 107,
@@ -1454,7 +1456,7 @@ export const COMPANIES: Company[] = [
     revenue: "$19.3 billion",
     employees: "3,900",
     colors: "Red, White",
-    hint: "Deliver on the Promise of mRNA Science"
+    hint: "Deliver on the Promise of mRNA Science",
   },
   {
     id: 108,
@@ -1466,7 +1468,7 @@ export const COMPANIES: Company[] = [
     revenue: "$82.6 billion",
     employees: "152,700",
     colors: "Red, White",
-    hint: "For All You Love"
+    hint: "For All You Love",
   },
   {
     id: 109,
@@ -1478,7 +1480,7 @@ export const COMPANIES: Company[] = [
     revenue: "$357.8 billion",
     employees: "259,500",
     colors: "Red, White",
-    hint: "Health is everything"
+    hint: "Health is everything",
   },
   {
     id: 110,
@@ -1490,7 +1492,7 @@ export const COMPANIES: Company[] = [
     revenue: "$132.7 billion",
     employees: "262,500",
     colors: "Red, White, Blue",
-    hint: "Trusted since 1901"
+    hint: "Trusted since 1901",
   },
   {
     id: 111,
@@ -1502,7 +1504,7 @@ export const COMPANIES: Company[] = [
     revenue: "$36.4 billion",
     employees: "69,000",
     colors: "Orange, Purple",
-    hint: "Do more, feel better, live longer"
+    hint: "Do more, feel better, live longer",
   },
   {
     id: 112,
@@ -1514,7 +1516,7 @@ export const COMPANIES: Company[] = [
     revenue: "$51.8 billion",
     employees: "101,000",
     colors: "Blue, Green",
-    hint: "Science For A Better Life"
+    hint: "Science For A Better Life",
   },
   {
     id: 113,
@@ -1526,7 +1528,7 @@ export const COMPANIES: Company[] = [
     revenue: "$68.7 billion",
     employees: "101,000",
     colors: "Blue, White",
-    hint: "Doing now what patients need next"
+    hint: "Doing now what patients need next",
   },
   {
     id: 114,
@@ -1538,7 +1540,7 @@ export const COMPANIES: Company[] = [
     revenue: "$45.4 billion",
     employees: "71,000",
     colors: "Blue",
-    hint: "Reimagining Medicine"
+    hint: "Reimagining Medicine",
   },
   {
     id: 115,
@@ -1550,7 +1552,7 @@ export const COMPANIES: Company[] = [
     revenue: "$59.3 billion",
     employees: "71,000",
     colors: "Green, Blue",
-    hint: "Inventing for Life"
+    hint: "Inventing for Life",
   },
   {
     id: 116,
@@ -1562,7 +1564,7 @@ export const COMPANIES: Company[] = [
     revenue: "$44.4 billion",
     employees: "83,100",
     colors: "Purple, Yellow",
-    hint: "What science can do"
+    hint: "What science can do",
   },
   {
     id: 117,
@@ -1574,7 +1576,7 @@ export const COMPANIES: Company[] = [
     revenue: "$28.2 billion",
     employees: "25,200",
     colors: "Blue, Red",
-    hint: "Biology for Humanity"
+    hint: "Biology for Humanity",
   },
   {
     id: 118,
@@ -1586,7 +1588,7 @@ export const COMPANIES: Company[] = [
     revenue: "$43.1 billion",
     employees: "115,000",
     colors: "Blue",
-    hint: "Life. To the fullest."
+    hint: "Life. To the fullest.",
   },
   {
     id: 119,
@@ -1598,7 +1600,7 @@ export const COMPANIES: Company[] = [
     revenue: "$34.1 billion",
     employees: "40,000",
     colors: "Red, Blue",
-    hint: "Answers That Matter"
+    hint: "Answers That Matter",
   },
   {
     id: 120,
@@ -1610,7 +1612,7 @@ export const COMPANIES: Company[] = [
     revenue: "$44.9 billion",
     employees: "130,000",
     colors: "Blue, Green",
-    hint: "Making the world healthier, cleaner and safer"
+    hint: "Making the world healthier, cleaner and safer",
   },
   {
     id: 121,
@@ -1622,7 +1624,7 @@ export const COMPANIES: Company[] = [
     revenue: "$154.8 billion",
     employees: "293,723",
     colors: "Blue",
-    hint: "So you can"
+    hint: "So you can",
   },
   {
     id: 122,
@@ -1634,7 +1636,7 @@ export const COMPANIES: Company[] = [
     revenue: "$115.1 billion",
     employees: "216,823",
     colors: "Blue, Red",
-    hint: "What would you like the power to do?"
+    hint: "What would you like the power to do?",
   },
   {
     id: 123,
@@ -1646,7 +1648,7 @@ export const COMPANIES: Company[] = [
     revenue: "$82.9 billion",
     employees: "238,000",
     colors: "Red, Yellow",
-    hint: "Together we'll go far"
+    hint: "Together we'll go far",
   },
   {
     id: 124,
@@ -1658,7 +1660,7 @@ export const COMPANIES: Company[] = [
     revenue: "$78.3 billion",
     employees: "240,000",
     colors: "Blue, Red",
-    hint: "Citi Never Sleeps"
+    hint: "Citi Never Sleeps",
   },
   {
     id: 125,
@@ -1670,7 +1672,7 @@ export const COMPANIES: Company[] = [
     revenue: "$46.3 billion",
     employees: "45,300",
     colors: "Blue",
-    hint: "Progress is everyone's business"
+    hint: "Progress is everyone's business",
   },
   {
     id: 126,
@@ -1682,7 +1684,7 @@ export const COMPANIES: Company[] = [
     revenue: "$54.1 billion",
     employees: "80,000",
     colors: "Blue",
-    hint: "Capital Creates Change"
+    hint: "Capital Creates Change",
   },
   {
     id: 127,
@@ -1694,7 +1696,7 @@ export const COMPANIES: Company[] = [
     revenue: "$52.9 billion",
     employees: "77,300",
     colors: "Blue",
-    hint: "Don't Live Life Without It"
+    hint: "Don't Live Life Without It",
   },
   {
     id: 128,
@@ -1706,7 +1708,7 @@ export const COMPANIES: Company[] = [
     revenue: "$34.3 billion",
     employees: "51,500",
     colors: "Red, Blue",
-    hint: "What's in your wallet?"
+    hint: "What's in your wallet?",
   },
   {
     id: 129,
@@ -1718,7 +1720,7 @@ export const COMPANIES: Company[] = [
     revenue: "$29.3 billion",
     employees: "26,500",
     colors: "Blue, Gold",
-    hint: "Everywhere You Want To Be"
+    hint: "Everywhere You Want To Be",
   },
   {
     id: 130,
@@ -1730,7 +1732,7 @@ export const COMPANIES: Company[] = [
     revenue: "$22.2 billion",
     employees: "29,900",
     colors: "Red, Yellow",
-    hint: "Priceless"
+    hint: "Priceless",
   },
   {
     id: 131,
@@ -1742,7 +1744,7 @@ export const COMPANIES: Company[] = [
     revenue: "$29.8 billion",
     employees: "29,900",
     colors: "Blue",
-    hint: "The simpler, safer way to pay and get paid"
+    hint: "The simpler, safer way to pay and get paid",
   },
   {
     id: 132,
@@ -1754,7 +1756,7 @@ export const COMPANIES: Company[] = [
     revenue: "$17.7 billion",
     employees: "12,000",
     colors: "White, Black",
-    hint: "Making Commerce Easy"
+    hint: "Making Commerce Easy",
   },
   {
     id: 133,
@@ -1766,7 +1768,7 @@ export const COMPANIES: Company[] = [
     revenue: "$14 billion",
     employees: "8,000",
     colors: "Blue, White",
-    hint: "Payments infrastructure for the internet"
+    hint: "Payments infrastructure for the internet",
   },
   {
     id: 134,
@@ -1778,7 +1780,7 @@ export const COMPANIES: Company[] = [
     revenue: "$1.8 billion",
     employees: "2,500",
     colors: "Green, Black",
-    hint: "Investing for Everyone"
+    hint: "Investing for Everyone",
   },
   {
     id: 135,
@@ -1790,7 +1792,7 @@ export const COMPANIES: Company[] = [
     revenue: "$900 million",
     employees: "500",
     colors: "Blue, White",
-    hint: "Share payments, split purchases"
+    hint: "Share payments, split purchases",
   },
   {
     id: 136,
@@ -1802,7 +1804,7 @@ export const COMPANIES: Company[] = [
     revenue: "$54.2 billion",
     employees: "95,000",
     colors: "Red, Blue",
-    hint: "Keep Climbing"
+    hint: "Keep Climbing",
   },
   {
     id: 137,
@@ -1814,7 +1816,7 @@ export const COMPANIES: Company[] = [
     revenue: "$51.4 billion",
     employees: "92,795",
     colors: "Blue, Gold",
-    hint: "Fly the Friendly Skies"
+    hint: "Fly the Friendly Skies",
   },
   {
     id: 138,
@@ -1826,7 +1828,7 @@ export const COMPANIES: Company[] = [
     revenue: "$52.8 billion",
     employees: "129,700",
     colors: "Red, White, Blue",
-    hint: "The World's Greatest Flyers Fly American"
+    hint: "The World's Greatest Flyers Fly American",
   },
   {
     id: 139,
@@ -1838,7 +1840,7 @@ export const COMPANIES: Company[] = [
     revenue: "$26.1 billion",
     employees: "66,100",
     colors: "Blue, Red, Yellow",
-    hint: "Low fares. Nothing to hide."
+    hint: "Low fares. Nothing to hide.",
   },
   {
     id: 140,
@@ -1850,7 +1852,7 @@ export const COMPANIES: Company[] = [
     revenue: "$9.4 billion",
     employees: "23,000",
     colors: "Blue",
-    hint: "You Above All"
+    hint: "You Above All",
   },
   {
     id: 141,
@@ -1862,7 +1864,7 @@ export const COMPANIES: Company[] = [
     revenue: "$9.6 billion",
     employees: "22,000",
     colors: "Blue, Green",
-    hint: "Fly Smart, Land Happy"
+    hint: "Fly Smart, Land Happy",
   },
   {
     id: 142,
@@ -1874,7 +1876,7 @@ export const COMPANIES: Company[] = [
     revenue: "$12.1 billion",
     employees: "16,500",
     colors: "Blue, Yellow",
-    hint: "Where You Book Matters"
+    hint: "Where You Book Matters",
   },
   {
     id: 143,
@@ -1886,7 +1888,7 @@ export const COMPANIES: Company[] = [
     revenue: "$8.4 billion",
     employees: "6,800",
     colors: "Coral, White",
-    hint: "Belong Anywhere"
+    hint: "Belong Anywhere",
   },
   {
     id: 144,
@@ -1898,7 +1900,7 @@ export const COMPANIES: Company[] = [
     revenue: "$17.1 billion",
     employees: "21,600",
     colors: "Blue",
-    hint: "Booking.yeah"
+    hint: "Booking.yeah",
   },
   {
     id: 145,
@@ -1910,7 +1912,7 @@ export const COMPANIES: Company[] = [
     revenue: "$9.8 billion",
     employees: "159,000",
     colors: "Blue",
-    hint: "For the Stay"
+    hint: "For the Stay",
   },
   {
     id: 146,
@@ -1922,7 +1924,7 @@ export const COMPANIES: Company[] = [
     revenue: "$22.3 billion",
     employees: "146,000",
     colors: "Red, Black",
-    hint: "Where I Belong"
+    hint: "Where I Belong",
   },
   {
     id: 147,
@@ -1934,7 +1936,7 @@ export const COMPANIES: Company[] = [
     revenue: "$5.7 billion",
     employees: "44,000",
     colors: "Blue",
-    hint: "We care for people so they can be their best"
+    hint: "We care for people so they can be their best",
   },
   {
     id: 148,
@@ -1946,7 +1948,7 @@ export const COMPANIES: Company[] = [
     revenue: "$20.4 billion",
     employees: "150,000",
     colors: "Red, Blue",
-    hint: "Choose Fun"
+    hint: "Choose Fun",
   },
   {
     id: 149,
@@ -1958,7 +1960,7 @@ export const COMPANIES: Company[] = [
     revenue: "$13.9 billion",
     employees: "85,000",
     colors: "Blue, Gold",
-    hint: "Where Extraordinary Happens"
+    hint: "Where Extraordinary Happens",
   },
   {
     id: 150,
@@ -1970,7 +1972,7 @@ export const COMPANIES: Company[] = [
     revenue: "$31.9 billion",
     employees: "32,800",
     colors: "Black, White",
-    hint: "Move the Way You Want"
+    hint: "Move the Way You Want",
   },
   {
     id: 151,
@@ -1982,7 +1984,7 @@ export const COMPANIES: Company[] = [
     revenue: "$4.1 billion",
     employees: "4,500",
     colors: "Pink",
-    hint: "Ride. Bike. Scoot."
+    hint: "Ride. Bike. Scoot.",
   },
   {
     id: 152,
@@ -1994,7 +1996,7 @@ export const COMPANIES: Company[] = [
     revenue: "$33.7 billion",
     employees: "12,800",
     colors: "Red, Black",
-    hint: "See What's Next"
+    hint: "See What's Next",
   },
   {
     id: 153,
@@ -2006,7 +2008,7 @@ export const COMPANIES: Company[] = [
     revenue: "$12.1 billion",
     employees: "3,500",
     colors: "Green",
-    hint: "Better Ruins Everything"
+    hint: "Better Ruins Everything",
   },
   {
     id: 154,
@@ -2018,7 +2020,7 @@ export const COMPANIES: Company[] = [
     revenue: "$88.9 billion",
     employees: "220,000",
     colors: "Blue, White",
-    hint: "The Happiest Place on Earth"
+    hint: "The Happiest Place on Earth",
   },
   {
     id: 155,
@@ -2030,7 +2032,7 @@ export const COMPANIES: Company[] = [
     revenue: "$1.4 billion",
     employees: "1,300",
     colors: "Blue, White, Red",
-    hint: "To infinity and beyond!"
+    hint: "To infinity and beyond!",
   },
   {
     id: 156,
@@ -2042,7 +2044,7 @@ export const COMPANIES: Company[] = [
     revenue: "$6 billion",
     employees: "1,000",
     colors: "Red, White",
-    hint: "Excelsior!"
+    hint: "Excelsior!",
   },
   {
     id: 157,
@@ -2054,7 +2056,7 @@ export const COMPANIES: Company[] = [
     revenue: "$8.5 billion",
     employees: "2,500",
     colors: "Black, White",
-    hint: "It's Not TV. It's HBO."
+    hint: "It's Not TV. It's HBO.",
   },
   {
     id: 158,
@@ -2066,7 +2068,7 @@ export const COMPANIES: Company[] = [
     revenue: "$10.8 billion",
     employees: "3,000",
     colors: "Blue, Purple",
-    hint: "The One to Watch"
+    hint: "The One to Watch",
   },
   {
     id: 159,
@@ -2078,7 +2080,7 @@ export const COMPANIES: Company[] = [
     revenue: "$30.1 billion",
     employees: "24,500",
     colors: "Blue",
-    hint: "A Mountain of Entertainment"
+    hint: "A Mountain of Entertainment",
   },
   {
     id: 160,
@@ -2090,7 +2092,7 @@ export const COMPANIES: Company[] = [
     revenue: "$9.9 billion",
     employees: "35,000",
     colors: "Blue, White",
-    hint: "A Comcast Company"
+    hint: "A Comcast Company",
   },
   {
     id: 161,
@@ -2102,7 +2104,7 @@ export const COMPANIES: Company[] = [
     revenue: "$10.3 billion",
     employees: "5,400",
     colors: "Blue, White",
-    hint: "Be Moved"
+    hint: "Be Moved",
   },
   {
     id: 162,
@@ -2114,7 +2116,7 @@ export const COMPANIES: Company[] = [
     revenue: "$10.4 billion",
     employees: "12,500",
     colors: "Blue, Gold",
-    hint: "The Shield"
+    hint: "The Shield",
   },
   {
     id: 163,
@@ -2126,7 +2128,7 @@ export const COMPANIES: Company[] = [
     revenue: "$700 million",
     employees: "2,200",
     colors: "Blue",
-    hint: "Experience the Wonder"
+    hint: "Experience the Wonder",
   },
   {
     id: 164,
@@ -2138,7 +2140,7 @@ export const COMPANIES: Company[] = [
     revenue: "$12.9 billion",
     employees: "6,500",
     colors: "Red, Black",
-    hint: "The Worldwide Leader in Sports"
+    hint: "The Worldwide Leader in Sports",
   },
   {
     id: 165,
@@ -2150,7 +2152,7 @@ export const COMPANIES: Company[] = [
     revenue: "$2.6 billion",
     employees: "1,800",
     colors: "Purple",
-    hint: "Let's Play"
+    hint: "Let's Play",
   },
   {
     id: 166,
@@ -2162,7 +2164,7 @@ export const COMPANIES: Company[] = [
     revenue: "$10 billion",
     employees: "10,000",
     colors: "Purple, Yellow, Green, Blue, Orange, Red",
-    hint: "More Colorful"
+    hint: "More Colorful",
   },
   {
     id: 167,
@@ -2174,7 +2176,7 @@ export const COMPANIES: Company[] = [
     revenue: "$3.5 billion",
     employees: "4,000",
     colors: "Red, White",
-    hint: "Facts First"
+    hint: "Facts First",
   },
   {
     id: 168,
@@ -2186,7 +2188,7 @@ export const COMPANIES: Company[] = [
     revenue: "$5.9 billion",
     employees: "22,000",
     colors: "Black, White",
-    hint: "Nation Shall Speak Peace Unto Nation"
+    hint: "Nation Shall Speak Peace Unto Nation",
   },
   {
     id: 169,
@@ -2198,7 +2200,7 @@ export const COMPANIES: Company[] = [
     revenue: "$51.2 billion",
     employees: "79,100",
     colors: "Black, White",
-    hint: "Just Do It"
+    hint: "Just Do It",
   },
   {
     id: 170,
@@ -2210,7 +2212,7 @@ export const COMPANIES: Company[] = [
     revenue: "$22.5 billion",
     employees: "59,258",
     colors: "Black, White",
-    hint: "Impossible Is Nothing"
+    hint: "Impossible Is Nothing",
   },
   {
     id: 171,
@@ -2222,7 +2224,7 @@ export const COMPANIES: Company[] = [
     revenue: "$8.6 billion",
     employees: "16,000",
     colors: "Red, White",
-    hint: "Forever Faster"
+    hint: "Forever Faster",
   },
   {
     id: 172,
@@ -2234,7 +2236,7 @@ export const COMPANIES: Company[] = [
     revenue: "$1.8 billion",
     employees: "7,000",
     colors: "Red, White",
-    hint: "Life is Not a Spectator Sport"
+    hint: "Life is Not a Spectator Sport",
   },
   {
     id: 173,
@@ -2246,7 +2248,7 @@ export const COMPANIES: Company[] = [
     revenue: "$5.7 billion",
     employees: "16,000",
     colors: "Black, Red",
-    hint: "I Will"
+    hint: "I Will",
   },
   {
     id: 174,
@@ -2258,7 +2260,7 @@ export const COMPANIES: Company[] = [
     revenue: "$1.5 billion",
     employees: "2,300",
     colors: "Blue",
-    hint: "We're in business to save our home planet"
+    hint: "We're in business to save our home planet",
   },
   {
     id: 175,
@@ -2270,7 +2272,7 @@ export const COMPANIES: Company[] = [
     revenue: "$3.5 billion",
     employees: "9,000",
     colors: "Blue, Red",
-    hint: "Tested Tough"
+    hint: "Tested Tough",
   },
   {
     id: 176,
@@ -2282,7 +2284,7 @@ export const COMPANIES: Company[] = [
     revenue: "$3.3 billion",
     employees: "5,000",
     colors: "Black, White, Red",
-    hint: "Never Stop Exploring"
+    hint: "Never Stop Exploring",
   },
   {
     id: 177,
@@ -2294,7 +2296,7 @@ export const COMPANIES: Company[] = [
     revenue: "$4 billion",
     employees: "12,000",
     colors: "Black, White, Red",
-    hint: "Off The Wall"
+    hint: "Off The Wall",
   },
   {
     id: 178,
@@ -2306,7 +2308,7 @@ export const COMPANIES: Company[] = [
     revenue: "$2.3 billion",
     employees: "3,500",
     colors: "Black, White",
-    hint: "Shoes are boring. Wear sneakers."
+    hint: "Shoes are boring. Wear sneakers.",
   },
   {
     id: 179,
@@ -2318,7 +2320,7 @@ export const COMPANIES: Company[] = [
     revenue: "$6.2 billion",
     employees: "15,100",
     colors: "Red",
-    hint: "Quality never goes out of style"
+    hint: "Quality never goes out of style",
   },
   {
     id: 180,
@@ -2330,7 +2332,7 @@ export const COMPANIES: Company[] = [
     revenue: "$8.1 billion",
     employees: "29,000",
     colors: "Red",
-    hint: "Sweat once a day"
+    hint: "Sweat once a day",
   },
   {
     id: 181,
@@ -2342,7 +2344,7 @@ export const COMPANIES: Company[] = [
     revenue: "$700 million",
     employees: "900",
     colors: "Black, White",
-    hint: "United We Sweat"
+    hint: "United We Sweat",
   },
   {
     id: 182,
@@ -2354,7 +2356,7 @@ export const COMPANIES: Company[] = [
     revenue: "$5.3 billion",
     employees: "10,500",
     colors: "Gray, Red",
-    hint: "Fearlessly Independent Since 1906"
+    hint: "Fearlessly Independent Since 1906",
   },
   {
     id: 183,
@@ -2366,7 +2368,7 @@ export const COMPANIES: Company[] = [
     revenue: "$3.6 billion",
     employees: "6,000",
     colors: "Green",
-    hint: "Come As You Are"
+    hint: "Come As You Are",
   },
   {
     id: 184,
@@ -2378,7 +2380,7 @@ export const COMPANIES: Company[] = [
     revenue: "$90.2 billion",
     employees: "547,000",
     colors: "Purple, Orange",
-    hint: "The World On Time"
+    hint: "The World On Time",
   },
   {
     id: 185,
@@ -2390,7 +2392,7 @@ export const COMPANIES: Company[] = [
     revenue: "$100.3 billion",
     employees: "500,000",
     colors: "Brown, Gold",
-    hint: "What can Brown do for you?"
+    hint: "What can Brown do for you?",
   },
   {
     id: 186,
@@ -2402,7 +2404,7 @@ export const COMPANIES: Company[] = [
     revenue: "$78.2 billion",
     employees: "516,000",
     colors: "Blue, White, Red",
-    hint: "Neither snow nor rain nor heat nor gloom of night"
+    hint: "Neither snow nor rain nor heat nor gloom of night",
   },
   {
     id: 187,
@@ -2414,7 +2416,7 @@ export const COMPANIES: Company[] = [
     revenue: "$32.7 billion",
     employees: "93,000",
     colors: "Red",
-    hint: "Science. Applied to Life."
+    hint: "Science. Applied to Life.",
   },
   {
     id: 188,
@@ -2426,7 +2428,7 @@ export const COMPANIES: Company[] = [
     revenue: "$76.6 billion",
     employees: "168,000",
     colors: "Blue",
-    hint: "Imagination at work"
+    hint: "Imagination at work",
   },
   {
     id: 189,
@@ -2438,7 +2440,7 @@ export const COMPANIES: Company[] = [
     revenue: "$248.9 billion",
     employees: "65,900",
     colors: "Green, Yellow",
-    hint: "Beyond Petroleum"
+    hint: "Beyond Petroleum",
   },
   {
     id: 190,
@@ -2450,7 +2452,7 @@ export const COMPANIES: Company[] = [
     revenue: "$381.3 billion",
     employees: "93,000",
     colors: "Red, Yellow",
-    hint: "Powering Progress Together"
+    hint: "Powering Progress Together",
   },
   {
     id: 191,
@@ -2462,7 +2464,7 @@ export const COMPANIES: Company[] = [
     revenue: "$413.7 billion",
     employees: "62,000",
     colors: "Red, Blue",
-    hint: "Taking on the world's toughest energy challenges"
+    hint: "Taking on the world's toughest energy challenges",
   },
   {
     id: 192,
@@ -2474,7 +2476,7 @@ export const COMPANIES: Company[] = [
     revenue: "$13 billion",
     employees: "23,000",
     colors: "Red",
-    hint: "The miracles of science"
+    hint: "The miracles of science",
   },
   {
     id: 193,
@@ -2486,7 +2488,7 @@ export const COMPANIES: Company[] = [
     revenue: "$77.8 billion",
     employees: "311,000",
     colors: "Teal",
-    hint: "Ingenuity for life"
+    hint: "Ingenuity for life",
   },
   {
     id: 194,
@@ -2498,7 +2500,7 @@ export const COMPANIES: Company[] = [
     revenue: "$126.5 billion",
     employees: "235,216",
     colors: "Orange",
-    hint: "To make it easy to do business anywhere"
+    hint: "To make it easy to do business anywhere",
   },
   {
     id: 195,
@@ -2510,7 +2512,7 @@ export const COMPANIES: Company[] = [
     revenue: "$87.9 billion",
     employees: "112,771",
     colors: "Green",
-    hint: "Tech for Social Good"
+    hint: "Tech for Social Good",
   },
   {
     id: 196,
@@ -2522,7 +2524,7 @@ export const COMPANIES: Company[] = [
     revenue: "$80 billion",
     employees: "110,000",
     colors: "Green, Blue",
-    hint: "Inspire Creativity, Enrich Life"
+    hint: "Inspire Creativity, Enrich Life",
   },
   {
     id: 197,
@@ -2534,7 +2536,7 @@ export const COMPANIES: Company[] = [
     revenue: "$2 billion",
     employees: "1,500",
     colors: "Black, White",
-    hint: "AI for the benefit of humanity"
+    hint: "AI for the benefit of humanity",
   },
   {
     id: 198,
@@ -2546,7 +2548,7 @@ export const COMPANIES: Company[] = [
     revenue: "$13.8 billion",
     employees: "20,500",
     colors: "Blue, White",
-    hint: "Relationships Matter"
+    hint: "Relationships Matter",
   },
   {
     id: 199,
@@ -2558,7 +2560,7 @@ export const COMPANIES: Company[] = [
     revenue: "$2.8 billion",
     employees: "3,100",
     colors: "Red, White",
-    hint: "When it comes to a great idea, you know it when you see it"
+    hint: "When it comes to a great idea, you know it when you see it",
   },
   {
     id: 200,
@@ -2570,7 +2572,6 @@ export const COMPANIES: Company[] = [
     revenue: "$32 billion",
     employees: "7,000",
     colors: "Purple, Pink, Orange, Yellow",
-    hint: "Capture and Share the World's Moments"
-  }
+    hint: "Capture and Share the World's Moments",
+  },
 ];
-
